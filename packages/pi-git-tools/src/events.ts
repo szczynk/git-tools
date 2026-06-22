@@ -4,9 +4,11 @@ import type {
   TurnEndEvent,
   TurnStartEvent,
 } from "@earendil-works/pi-coding-agent";
-import type { AssistantMessage, ToolResultMessage } from "@earendil-works/pi-ai/base";
-import { MAX_NUDGES } from "@szczynk/git-tools-core";
+import type { TextContent, ToolResultMessage } from "@earendil-works/pi-ai/base";
+import { FULL_DIFF_HINT, MAX_NUDGES } from "@szczynk/git-tools-core";
 import {
+  GIT_TOOLS_DIFF_NAME,
+  GIT_TOOLS_DIFF_NO_COMPACT_NAME,
   GIT_TOOLS_FORMAT_NAME,
   GIT_TOOLS_FORMAT_PROMPT_RESULT_NOT_CALLED,
 } from "./constants.js";
@@ -31,12 +33,6 @@ export function registerEvents(pi: ExtensionAPI) {
     if (!awaitingGitFormatMessage) return;
 
     const toolResults = event.toolResults ?? [];
-    const assistantMessage = event.message as AssistantMessage;
-
-    const assistantMessageContent = assistantMessage?.content
-      .filter((c) => c.type === "text")
-      .map((c) => c.text)
-      .join("") ?? "";
 
     const calledGitFormatMessage = toolResults.some(
       (r: ToolResultMessage) => r.toolName === GIT_TOOLS_FORMAT_NAME
@@ -49,8 +45,18 @@ export function registerEvents(pi: ExtensionAPI) {
       return;
     }
 
-    const alreadyCommitted = new RegExp(`\\b${GIT_TOOLS_FORMAT_NAME}\\b`, "i").test(assistantMessageContent);
-    if (alreadyCommitted) return;
+    const showedFullDiff = toolResults.some((r) => {
+      if (r.toolName === GIT_TOOLS_DIFF_NO_COMPACT_NAME) return true;
+      if (r.toolName === GIT_TOOLS_DIFF_NAME) {
+        const text = (r.content as TextContent[])?.map(c => c.text).join('') ?? '';
+        return !text.includes(FULL_DIFF_HINT);
+      }
+      return false;
+    });
+
+    if (!showedFullDiff) {
+      return;
+    }
 
     if (nudgeCount < MAX_NUDGES) {
       nudgeCount++;

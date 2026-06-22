@@ -99,7 +99,7 @@ export default function (pi: ExtensionAPI) {
     parameters: GitDiffParamsSchema,
     async execute(toolCallId: string, params: any) {
       const result = await executeDiff(toolCallId, params);
-      events.setAwaitingGitFormatMessage(result.content[0]?.type === "text" && !result.content[0].text.includes("BLOCKED"));
+      events.setAwaitingGitFormatMessage(result.content[0]?.type === "text" && !result.content[0].text.includes("BLOCKED") && !result.content[0].text.includes("WARNING"));
       return result;
     },
   });
@@ -123,6 +123,10 @@ export default function (pi: ExtensionAPI) {
     description: GIT_TOOLS_FORMAT_DESCRIPTION,
     promptSnippet: GIT_TOOLS_FORMAT_PROMPT_SNIPPET,
     parameters: GitFormatParamsSchema,
-    execute: executeFormat,
+    async execute(toolCallId: string, params: any) {
+      const result = await executeFormat(toolCallId, params);
+      events.setAwaitingGitFormatMessage(false);
+      return result;
+    },
   });
 }
