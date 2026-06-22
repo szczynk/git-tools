@@ -1,0 +1,28 @@
+{
+  "name": "git-tools-monorepo",
+  "private": true,
+  "description": "",
+  "license": "MIT",
+  "author": "szczynk",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @szczynk/git-tools-core && npm run build --workspaces --if-present",
+    "test": "vitest run",
+    "test:unit": "vitest run --exclude '**/e2e.test.ts'",
+    "test:e2e": "vitest run e2e.test",
+    "test:watch": "vitest",
+    "clean": "rm -rf packages/*/dist packages/*/tsconfig.tsbuildinfo",
+    "ci:docker": "bash scripts/ci-docker.sh",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "changeset publish"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.31.0",
+    "@types/node": "^26.0.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}

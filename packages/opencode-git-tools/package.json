@@ -1,0 +1,41 @@
+{
+  "name": "@szczynk/opencode-git-tools",
+  "version": "0.0.1",
+  "description": "",
+  "license": "MIT",
+  "author": "szczynk",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "cp ../../README.md ./README.md && tsup",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo README.md",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "^1.17.9"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": ">=1.17.0"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@szczynk/git-tools-core": "*",
+    "@opencode-ai/sdk": "1.17.9",
+    "tsup": "^8.5.1"
+  }
+}

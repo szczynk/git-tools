@@ -1,0 +1,53 @@
+{
+  "name": "@szczynk/vsce-git-tools",
+  "version": "0.0.1",
+  "description": "",
+  "license": "MIT",
+  "author": "szczynk",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "vsce": {
+    "dependencies": false
+  },
+  "activationEvents": [],
+  "contributes": {
+    "commands": [],
+    "menus": {
+      "scm/title": []
+    },
+    "configuration": [
+      {
+        "type": "object",
+        "title": "",
+        "properties": {}
+      }
+    ]
+  },
+  "scripts": {},
+  "dependencies": {},
+  "engines": {
+    "node": ">=22",
+    "vscode": "^1.120.0"
+  },
+  "peerDependencies": {},
+  "devDependencies": {
+    "@szczynk/git-tools-core": "*",
+    "tsup": "^8.5.1"
+  },
+  "extensionDependencies": [
+		"vscode.git"
+	]
+}
