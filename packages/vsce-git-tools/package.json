@@ -1,53 +1,72 @@
 {
   "name": "@szczynk/vsce-git-tools",
   "version": "0.0.1",
-  "description": "",
+  "description": "VS Code extension for git-tools — commit message formatting and git helpers",
   "license": "MIT",
   "author": "szczynk",
   "publishConfig": {
     "access": "public"
   },
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    }
+  "main": "./dist/extension.js",
+  "scripts": {
+    "build": "cp ../../README.md ./README.md && tsup",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo README.md",
+    "prepack": "npm run build",
+    "lint": "tsc --noEmit"
   },
-  "files": [
-    "dist"
-  ],
-  "vsce": {
-    "dependencies": false
-  },
-  "activationEvents": [],
-  "contributes": {
-    "commands": [],
-    "menus": {
-      "scm/title": []
-    },
-    "configuration": [
-      {
-        "type": "object",
-        "title": "",
-        "properties": {}
-      }
-    ]
-  },
-  "scripts": {},
-  "dependencies": {},
-  "engines": {
-    "node": ">=22",
-    "vscode": "^1.120.0"
-  },
-  "peerDependencies": {},
   "devDependencies": {
     "@szczynk/git-tools-core": "*",
+    "@types/vscode": "^1.125.0",
     "tsup": "^8.5.1"
   },
+  "engines": {
+    "vscode": "^1.120.0"
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "git-tools.status",
+        "title": "Git Tools: Status"
+      },
+      {
+        "command": "git-tools.restoreStaged",
+        "title": "Git Tools: Restore Staged"
+      },
+      {
+        "command": "git-tools.diff",
+        "title": "Git Tools: Diff"
+      },
+      {
+        "command": "git-tools.diffNoCompact",
+        "title": "Git Tools: Diff (No Compact)"
+      },
+      {
+        "command": "git-tools.formatMessage",
+        "title": "Git Tools: Format Commit Message"
+      }
+    ],
+    "menus": {
+      "scm/title": [
+        {
+          "command": "git-tools.status",
+          "group": "navigation"
+        },
+        {
+          "command": "git-tools.restoreStaged",
+          "group": "navigation"
+        },
+        {
+          "command": "git-tools.formatMessage",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
   "extensionDependencies": [
-		"vscode.git"
-	]
+    "vscode.git"
+  ]
 }

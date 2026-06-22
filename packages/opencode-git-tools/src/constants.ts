@@ -1,0 +1,5 @@
+export const GIT_TOOLS_STATUS_NAME = "git_status"
+export const GIT_TOOLS_RESTORE_STAGED_NAME = "git_restore_staged"
+export const GIT_TOOLS_DIFF_NAME = "git_diff"
+export const GIT_TOOLS_DIFF_NO_COMPACT_NAME = "git_diff_no_compact"
+export const GIT_TOOLS_FORMAT_NAME = "git_format_message"
