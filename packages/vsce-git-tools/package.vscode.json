@@ -6,6 +6,15 @@
   "description": "VS Code extension for git-tools — commit message formatting and git helpers",
   "license": "MIT",
   "author": "szczynk",
+  "repository": {
+    "type": "https",
+    "url": "https://github.com/szczynk/git-tools.git",
+    "directory": "packages/vsce-git-tools"
+  },
+  "homepage": "https://github.com/szczynk/git-tools#readme",
+  "bugs": {
+    "url": "https://github.com/szczynk/git-tools/issues"
+  },
   "publishConfig": {
     "access": "public"
   },

@@ -4,6 +4,14 @@
   "description": "",
   "license": "MIT",
   "author": "szczynk",
+  "repository": {
+    "type": "https",
+    "url": "https://github.com/szczynk/git-tools.git"
+  },
+  "homepage": "https://github.com/szczynk/git-tools#readme",
+  "bugs": {
+    "url": "https://github.com/szczynk/git-tools/issues"
+  },
   "workspaces": [
     "packages/*"
   ],
