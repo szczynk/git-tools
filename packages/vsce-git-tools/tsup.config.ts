@@ -7,4 +7,5 @@ export default defineConfig({
   clean: true,
   sourcemap: true,
   external: ["vscode"],
+  noExternal: ["@szczynk/git-tools-core"],
 });

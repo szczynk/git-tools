@@ -3,9 +3,12 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",
+    "paths": {
+      "@szczynk/git-tools-core": ["../core/src/index.ts"]
+    },
     "composite": true
   },
-  "include": ["src"],
+  "include": ["src/**/*"],
   "references": [
     { "path": "../core" }
   ]
