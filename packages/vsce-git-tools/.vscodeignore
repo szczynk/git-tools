@@ -1,0 +1,64 @@
+# Exclude production dependencies (we bundle the extension code)
+node_modules/**
+
+# Exclude VCS and workspace config
+.git/**
+.github/**
+.vscode/**
+.vscode-test/**
+.vscode-test.mjs
+coverage/**
+
+# Exclude build configs and project metadata not needed at runtime
+.eslintrc*
+.eslint*
+.prettier*
+*.code-workspace
+.gitignore
+.gitmodules
+.npmrc
+.github/**
+.nyc_output/**
+
+# Exclude development sources and tests
+src/**
+src/test/**
+dist/test/**
+**/*.test.*
+**/*.spec.*
+
+# Exclude maps and TypeScript sources from package
+**/*.map
+**/*.ts
+**/*.tsx
+
+# Exclude local artifacts
+*.vsix
+.vsix/**
+*.log
+npm-debug.log*
+yarn-error.log*
+
+# Keep only runtime bundles and assets
+!dist/**
+!package.json
+!README.md
+!LICENSE
+
+# Node modules: keep runtime code but drop heavy non-runtime extras
+node_modules/**/test/**
+node_modules/**/tests/**
+node_modules/**/__tests__/**
+node_modules/**/benchmark/**
+node_modules/**/benchmarks/**
+node_modules/**/example/**
+node_modules/**/examples/**
+node_modules/**/doc/**
+node_modules/**/docs/**
+node_modules/**/man/**
+node_modules/**/.github/**
+node_modules/**/.vscode/**
+
+# back
+../**
+../../**
