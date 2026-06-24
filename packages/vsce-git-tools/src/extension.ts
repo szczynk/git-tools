@@ -5,8 +5,10 @@ import {
   STAGED_RE, FULL_DIFF_HINT, FAILED_ERROR_MESSAGE,
   type FormatMessageParams,
 } from "@szczynk/git-tools-core";
-import { LlamaProvider } from "./llm-provider.js";
+import { LlamaProvider, getConfig } from "./llm-provider.js";
 import { LlamaConfigViewProvider } from "./llm-config-view.js";
+import { streamChat } from "./llm-service.js";
+import type { ChatMsg, ToolCallChunk } from "./llm-service.js";
 
 const P = "git_tools_";
 const TOOL_STATUS = `${P}git_status`;
@@ -221,41 +223,38 @@ async function handleCommit() {
     return;
   }
 
-  const allModels = await vscode.lm.selectChatModels();
-  const cfgModel = vscode.workspace.getConfiguration("git-tools").get<string>("model", "");
-  let model = allModels.find(m => m.vendor === "git-tools-llama" && m.id === cfgModel);
-  if (!model) model = allModels.find(m => m.vendor === "git-tools-llama");
-  if (!model) model = allModels[0];
-  if (!model) {
-    void vscode.window.showErrorMessage("No language model found. Configure a local LLM in the Git Tools LLM sidebar or install GitHub Copilot.");
+  const cfg = getConfig();
+  if (!cfg) {
+    void vscode.window.showErrorMessage("Git Tools LLM not configured. Set base URL and model in the Git Tools LLM sidebar.");
     return;
   }
 
-  const cts = new vscode.CancellationTokenSource();
+  const ac = new AbortController();
 
   await vscode.window.withProgress({
     location: vscode.ProgressLocation.Notification,
     title: "Git Tools: Running commit workflow...",
     cancellable: true,
   }, async (progress, token) => {
-    token.onCancellationRequested(() => cts.cancel());
+    token.onCancellationRequested(() => ac.abort());
 
     const log = channel();
     log.show();
     log.appendLine("── Git Commit Workflow ──");
-    log.appendLine(`[model] vendor=${model.vendor} id=${model.id}`);
+    log.appendLine(`[model] ${cfg.model}`);
 
-    const tools: vscode.LanguageModelChatTool[] = [
-      { name: TOOL_STATUS, description: TOOL_DESCRIPTIONS[TOOL_STATUS], inputSchema: TOOL_SCHEMAS[TOOL_STATUS] },
-      { name: TOOL_RESTORE, description: TOOL_DESCRIPTIONS[TOOL_RESTORE], inputSchema: TOOL_SCHEMAS[TOOL_RESTORE] },
-      { name: TOOL_DIFF, description: TOOL_DESCRIPTIONS[TOOL_DIFF], inputSchema: TOOL_SCHEMAS[TOOL_DIFF] },
-      { name: TOOL_DIFF_NC, description: TOOL_DESCRIPTIONS[TOOL_DIFF_NC], inputSchema: TOOL_SCHEMAS[TOOL_DIFF_NC] },
-      { name: TOOL_FORMAT, description: TOOL_DESCRIPTIONS[TOOL_FORMAT], inputSchema: TOOL_SCHEMAS[TOOL_FORMAT] },
-    ];
+    const tools = Object.entries(TOOL_DESCRIPTIONS).map(([name, description]) => ({
+      type: "function" as const,
+      function: {
+        name,
+        description,
+        parameters: TOOL_SCHEMAS[name] as Record<string, unknown>,
+      },
+    }));
 
-    let messages: vscode.LanguageModelChatMessage[] = [
-      new vscode.LanguageModelChatMessage(1, CMD_PROMPT, "system"),
-      vscode.LanguageModelChatMessage.User("Run the git commit workflow for this repository."),
+    let msgs: ChatMsg[] = [
+      { role: "system", content: CMD_PROMPT },
+      { role: "user", content: "Run the git commit workflow for this repository." },
     ];
 
     let commitMessage = "";
@@ -263,17 +262,40 @@ async function handleCommit() {
     let round = 0;
     const MAX_ROUNDS = 8;
 
-    while (round < MAX_ROUNDS && !cts.token.isCancellationRequested) {
+    while (round < MAX_ROUNDS && !ac.signal.aborted) {
       round++;
       progress.report({ message: `Round ${round}/${MAX_ROUNDS}...` });
-      let response: vscode.LanguageModelChatResponse;
+
+      let text = "";
+      let pendingToolCalls = new Map<number, ToolCallChunk>();
+
       try {
-        response = await model.sendRequest(messages, {
+        const stream = streamChat(cfg, {
+          messages: msgs,
           tools,
-          toolMode: vscode.LanguageModelChatToolMode.Auto,
-        }, cts.token);
+          stream: true,
+          signal: ac.signal,
+        });
+
+        for await (const chunk of stream) {
+          if (ac.signal.aborted) break;
+
+          if (chunk.type === "text") {
+            text += chunk.text;
+          } else if (chunk.type === "tool_call" && chunk.toolCall) {
+            const idx = chunk.toolCall.index;
+            const existing = pendingToolCalls.get(idx);
+            if (existing) {
+              if (chunk.toolCall.name) existing.name = chunk.toolCall.name;
+              if (chunk.toolCall.args) existing.args += chunk.toolCall.args;
+              if (chunk.toolCall.id) existing.id = chunk.toolCall.id;
+            } else {
+              pendingToolCalls.set(idx, { ...chunk.toolCall });
+            }
+          }
+        }
       } catch (e) {
-        if (cts.token.isCancellationRequested) {
+        if (ac.signal.aborted) {
           log.appendLine("Workflow cancelled");
           return;
         }
@@ -281,42 +303,36 @@ async function handleCommit() {
         break;
       }
 
-      const parts: vscode.LanguageModelResponsePart[] = [];
-      for await (const part of response.stream) {
-        if (cts.token.isCancellationRequested) break;
-        parts.push(part as vscode.LanguageModelResponsePart);
-      }
-      if (cts.token.isCancellationRequested) {
+      if (ac.signal.aborted) {
         log.appendLine("Workflow cancelled");
         return;
       }
 
-      const toolCalls = parts.filter((p): p is vscode.LanguageModelToolCallPart =>
-        p instanceof vscode.LanguageModelToolCallPart
-      );
-      const textParts = parts.filter((p): p is vscode.LanguageModelTextPart =>
-        p instanceof vscode.LanguageModelTextPart
-      );
-
-      log.appendLine(`[round ${round}] text parts: ${textParts.length}, tool calls: ${toolCalls.length}`);
-      for (const t of textParts) {
-        log.appendLine(t.value);
-      }
+      const toolCalls = Array.from(pendingToolCalls.values());
+      log.appendLine(`[round ${round}] text length: ${text.length}, tool calls: ${toolCalls.length}`);
+      if (text) log.appendLine(text);
 
       if (toolCalls.length === 0) {
-        commitMessage = textParts.map(t => t.value).join("");
+        commitMessage = text;
         break;
       }
 
-      messages.push(vscode.LanguageModelChatMessage.Assistant(parts.filter(
-        p => p instanceof vscode.LanguageModelTextPart || p instanceof vscode.LanguageModelToolCallPart
-      )));
+      // Build assistant message
+      const asst: ChatMsg = { role: "assistant", content: text || null };
+      asst.tool_calls = toolCalls.map(tc => ({
+        id: tc.id,
+        type: "function" as const,
+        function: { name: tc.name, arguments: tc.args },
+      }));
+      msgs.push(asst);
 
+      // Dispatch tool calls
       const repoPath = repo.rootUri.fsPath;
-      const resultParts: vscode.LanguageModelToolResultPart[] = [];
+      const results: ChatMsg[] = [];
       for (const tc of toolCalls) {
         log.appendLine(`→ tool call: ${tc.name}`);
-        const input = tc.input as Record<string, unknown>;
+        let input: Record<string, unknown>;
+        try { input = JSON.parse(tc.args); } catch { input = {}; }
         let textContent: string;
         switch (tc.name) {
           case TOOL_STATUS:
@@ -347,12 +363,12 @@ async function handleCommit() {
           if (stopIdx !== -1) formatResultCaptured = formatResultCaptured.slice(0, stopIdx).trim();
         }
 
-        resultParts.push(new vscode.LanguageModelToolResultPart(tc.callId, [new vscode.LanguageModelTextPart(textContent)]));
+        results.push({ role: "tool", content: textContent, tool_call_id: tc.id } as ChatMsg);
       }
-      messages.push(vscode.LanguageModelChatMessage.User(resultParts));
+      msgs.push(...results);
     }
 
-    if (cts.token.isCancellationRequested) {
+    if (ac.signal.aborted) {
       return;
     }
 
@@ -368,8 +384,6 @@ async function handleCommit() {
       void vscode.window.showWarningMessage("Failed to generate a commit message. Check the LLM configuration in the Git Tools sidebar and ensure the model returns valid tool calls.");
     }
   });
-
-  cts.dispose();
 }
 
 // ── Manual commands (command palette only) ────────────────────────────
