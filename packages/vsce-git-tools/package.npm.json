@@ -20,7 +20,7 @@
   "main": "./dist/extension.js",
   "scripts": {
     "build": "cp ../../README.md ./README.md && tsup",
-    "clean": "rm -rf dist tsconfig.tsbuildinfo README.md",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo README.md *.vsix",
     "prepack": "npm run build",
     "lint": "tsc --noEmit",
     "package": "cp package.vscode.json package.json && vsce package && cp package.npm.json package.json"

@@ -231,117 +231,145 @@ async function handleCommit() {
     return;
   }
 
-  const statusMsg = vscode.window.setStatusBarMessage("Git Tools: Running commit workflow...");
-  const log = channel();
-  log.show();
-  log.appendLine("── Git Commit Workflow ──");
-  log.appendLine(`[model] vendor=${model.vendor} id=${model.id}`);
+  const cts = new vscode.CancellationTokenSource();
 
-  const tools: vscode.LanguageModelChatTool[] = [
-    { name: TOOL_STATUS, description: TOOL_DESCRIPTIONS[TOOL_STATUS], inputSchema: TOOL_SCHEMAS[TOOL_STATUS] },
-    { name: TOOL_RESTORE, description: TOOL_DESCRIPTIONS[TOOL_RESTORE], inputSchema: TOOL_SCHEMAS[TOOL_RESTORE] },
-    { name: TOOL_DIFF, description: TOOL_DESCRIPTIONS[TOOL_DIFF], inputSchema: TOOL_SCHEMAS[TOOL_DIFF] },
-    { name: TOOL_DIFF_NC, description: TOOL_DESCRIPTIONS[TOOL_DIFF_NC], inputSchema: TOOL_SCHEMAS[TOOL_DIFF_NC] },
-    { name: TOOL_FORMAT, description: TOOL_DESCRIPTIONS[TOOL_FORMAT], inputSchema: TOOL_SCHEMAS[TOOL_FORMAT] },
-  ];
+  await vscode.window.withProgress({
+    location: vscode.ProgressLocation.Notification,
+    title: "Git Tools: Running commit workflow...",
+    cancellable: true,
+  }, async (progress, token) => {
+    token.onCancellationRequested(() => cts.cancel());
 
-  let messages: vscode.LanguageModelChatMessage[] = [
-    new vscode.LanguageModelChatMessage(1, CMD_PROMPT, "system"),
-    vscode.LanguageModelChatMessage.User("Run the git commit workflow for this repository."),
-  ];
+    const log = channel();
+    log.show();
+    log.appendLine("── Git Commit Workflow ──");
+    log.appendLine(`[model] vendor=${model.vendor} id=${model.id}`);
 
-  let commitMessage = "";
-  let formatResultCaptured = "";
-  let round = 0;
-  const MAX_ROUNDS = 8;
+    const tools: vscode.LanguageModelChatTool[] = [
+      { name: TOOL_STATUS, description: TOOL_DESCRIPTIONS[TOOL_STATUS], inputSchema: TOOL_SCHEMAS[TOOL_STATUS] },
+      { name: TOOL_RESTORE, description: TOOL_DESCRIPTIONS[TOOL_RESTORE], inputSchema: TOOL_SCHEMAS[TOOL_RESTORE] },
+      { name: TOOL_DIFF, description: TOOL_DESCRIPTIONS[TOOL_DIFF], inputSchema: TOOL_SCHEMAS[TOOL_DIFF] },
+      { name: TOOL_DIFF_NC, description: TOOL_DESCRIPTIONS[TOOL_DIFF_NC], inputSchema: TOOL_SCHEMAS[TOOL_DIFF_NC] },
+      { name: TOOL_FORMAT, description: TOOL_DESCRIPTIONS[TOOL_FORMAT], inputSchema: TOOL_SCHEMAS[TOOL_FORMAT] },
+    ];
 
-  while (round < MAX_ROUNDS) {
-    round++;
-    let response: vscode.LanguageModelChatResponse;
-    try {
-      response = await model.sendRequest(messages, { tools, toolMode: vscode.LanguageModelChatToolMode.Auto });
-    } catch (e) {
-      log.appendLine(`LM request failed: ${e}`);
-      break;
-    }
+    let messages: vscode.LanguageModelChatMessage[] = [
+      new vscode.LanguageModelChatMessage(1, CMD_PROMPT, "system"),
+      vscode.LanguageModelChatMessage.User("Run the git commit workflow for this repository."),
+    ];
 
-    const parts: vscode.LanguageModelResponsePart[] = [];
-    for await (const part of response.stream) {
-      parts.push(part as vscode.LanguageModelResponsePart);
-    }
+    let commitMessage = "";
+    let formatResultCaptured = "";
+    let round = 0;
+    const MAX_ROUNDS = 8;
 
-    const toolCalls = parts.filter((p): p is vscode.LanguageModelToolCallPart =>
-      p instanceof vscode.LanguageModelToolCallPart
-    );
-    const textParts = parts.filter((p): p is vscode.LanguageModelTextPart =>
-      p instanceof vscode.LanguageModelTextPart
-    );
-
-    log.appendLine(`[round ${round}] text parts: ${textParts.length}, tool calls: ${toolCalls.length}`);
-    for (const t of textParts) {
-      log.appendLine(t.value);
-    }
-
-    if (toolCalls.length === 0) {
-      commitMessage = textParts.map(t => t.value).join("");
-      break;
-    }
-
-    messages.push(vscode.LanguageModelChatMessage.Assistant(parts.filter(
-      p => p instanceof vscode.LanguageModelTextPart || p instanceof vscode.LanguageModelToolCallPart
-    )));
-
-    const repoPath = repo.rootUri.fsPath;
-    const resultParts: vscode.LanguageModelToolResultPart[] = [];
-    for (const tc of toolCalls) {
-      log.appendLine(`→ tool call: ${tc.name}`);
-      const input = tc.input as Record<string, unknown>;
-      let textContent: string;
-      switch (tc.name) {
-        case TOOL_STATUS:
-          textContent = execStatus(repoPath);
-          break;
-        case TOOL_RESTORE:
-          textContent = execRestore(repoPath);
-          break;
-        case TOOL_DIFF:
-          textContent = execDiff(repoPath, input.args as string);
-          break;
-        case TOOL_DIFF_NC:
-          textContent = execDiffNC(repoPath, input.args as string);
-          break;
-        case TOOL_FORMAT:
-          textContent = execFormat(input as unknown as FormatMessageParams);
-          break;
-        default:
-          textContent = `Error: unknown tool ${tc.name}`;
-      }
-      log.appendLine(`← result: \n${textContent.slice(0, 200)}${textContent.length > 200 ? "..." : ""}\n`);
-
-      if (tc.name === TOOL_FORMAT) {
-        const match = textContent.match(/Ready to copy-paste:\n\n([\s\S]*)/);
-        if (match) formatResultCaptured = match[1].trim();
-        else formatResultCaptured = textContent;
-        const stopIdx = formatResultCaptured.indexOf("## CRITICAL: Final Output Rule");
-        if (stopIdx !== -1) formatResultCaptured = formatResultCaptured.slice(0, stopIdx).trim();
+    while (round < MAX_ROUNDS && !cts.token.isCancellationRequested) {
+      round++;
+      progress.report({ message: `Round ${round}/${MAX_ROUNDS}...` });
+      let response: vscode.LanguageModelChatResponse;
+      try {
+        response = await model.sendRequest(messages, {
+          tools,
+          toolMode: vscode.LanguageModelChatToolMode.Auto,
+        }, cts.token);
+      } catch (e) {
+        if (cts.token.isCancellationRequested) {
+          log.appendLine("Workflow cancelled");
+          return;
+        }
+        log.appendLine(`LM request failed: ${e}`);
+        break;
       }
 
-      resultParts.push(new vscode.LanguageModelToolResultPart(tc.callId, [new vscode.LanguageModelTextPart(textContent)]));
+      const parts: vscode.LanguageModelResponsePart[] = [];
+      for await (const part of response.stream) {
+        if (cts.token.isCancellationRequested) break;
+        parts.push(part as vscode.LanguageModelResponsePart);
+      }
+      if (cts.token.isCancellationRequested) {
+        log.appendLine("Workflow cancelled");
+        return;
+      }
+
+      const toolCalls = parts.filter((p): p is vscode.LanguageModelToolCallPart =>
+        p instanceof vscode.LanguageModelToolCallPart
+      );
+      const textParts = parts.filter((p): p is vscode.LanguageModelTextPart =>
+        p instanceof vscode.LanguageModelTextPart
+      );
+
+      log.appendLine(`[round ${round}] text parts: ${textParts.length}, tool calls: ${toolCalls.length}`);
+      for (const t of textParts) {
+        log.appendLine(t.value);
+      }
+
+      if (toolCalls.length === 0) {
+        commitMessage = textParts.map(t => t.value).join("");
+        break;
+      }
+
+      messages.push(vscode.LanguageModelChatMessage.Assistant(parts.filter(
+        p => p instanceof vscode.LanguageModelTextPart || p instanceof vscode.LanguageModelToolCallPart
+      )));
+
+      const repoPath = repo.rootUri.fsPath;
+      const resultParts: vscode.LanguageModelToolResultPart[] = [];
+      for (const tc of toolCalls) {
+        log.appendLine(`→ tool call: ${tc.name}`);
+        const input = tc.input as Record<string, unknown>;
+        let textContent: string;
+        switch (tc.name) {
+          case TOOL_STATUS:
+            textContent = execStatus(repoPath);
+            break;
+          case TOOL_RESTORE:
+            textContent = execRestore(repoPath);
+            break;
+          case TOOL_DIFF:
+            textContent = execDiff(repoPath, input.args as string);
+            break;
+          case TOOL_DIFF_NC:
+            textContent = execDiffNC(repoPath, input.args as string);
+            break;
+          case TOOL_FORMAT:
+            textContent = execFormat(input as unknown as FormatMessageParams);
+            break;
+          default:
+            textContent = `Error: unknown tool ${tc.name}`;
+        }
+        log.appendLine(`← result: \n${textContent.slice(0, 200)}${textContent.length > 200 ? "..." : ""}\n`);
+
+        if (tc.name === TOOL_FORMAT) {
+          const match = textContent.match(/Ready to copy-paste:\n\n([\s\S]*)/);
+          if (match) formatResultCaptured = match[1].trim();
+          else formatResultCaptured = textContent;
+          const stopIdx = formatResultCaptured.indexOf("## CRITICAL: Final Output Rule");
+          if (stopIdx !== -1) formatResultCaptured = formatResultCaptured.slice(0, stopIdx).trim();
+        }
+
+        resultParts.push(new vscode.LanguageModelToolResultPart(tc.callId, [new vscode.LanguageModelTextPart(textContent)]));
+      }
+      messages.push(vscode.LanguageModelChatMessage.User(resultParts));
     }
-    messages.push(vscode.LanguageModelChatMessage.User(resultParts));
-  }
 
-  statusMsg.dispose();
+    if (cts.token.isCancellationRequested) {
+      return;
+    }
 
-  const finalMsg = formatResultCaptured || commitMessage;
-  if (finalMsg) {
-    repo.inputBox.value = finalMsg;
-    log.appendLine("── Commit message set in SCM input box ──");
-    void vscode.window.showInformationMessage("Commit message generated!");
-  } else {
-    log.appendLine("── No commit message generated ──");
-    void vscode.window.showWarningMessage("Failed to generate a commit message. See Git Tools output channel.");
-  }
+    const finalMsg = formatResultCaptured || commitMessage;
+    if (finalMsg) {
+      repo.inputBox.value = finalMsg;
+      log.appendLine("── Commit message set in SCM input box ──");
+      void vscode.window.showInformationMessage("Commit message generated!");
+    } else {
+      log.appendLine("── No commit message generated ──");
+      log.appendLine(`commitMessage: ${commitMessage ? "(non-empty)" : "(empty)"}`);
+      log.appendLine(`formatResultCaptured: ${formatResultCaptured ? "(non-empty)" : "(empty)"}`);
+      void vscode.window.showWarningMessage("Failed to generate a commit message. Check the LLM configuration in the Git Tools sidebar and ensure the model returns valid tool calls.");
+    }
+  });
+
+  cts.dispose();
 }
 
 // ── Manual commands (command palette only) ────────────────────────────
