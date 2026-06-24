@@ -115,7 +115,22 @@ function channel(): vscode.OutputChannel {
 function getRepo(): Repository | undefined {
   const ext = vscode.extensions.getExtension<GitExtension>("vscode.git")?.exports;
   if (!ext?.getAPI) return;
-  return ext.getAPI(1).repositories[0];
+  const api = ext.getAPI(1);
+  const log = channel();
+
+  const activeUri = vscode.window.activeTextEditor?.document.uri;
+  if (activeUri) {
+    for (const r of api.repositories) {
+      if (activeUri.fsPath.startsWith(r.rootUri.fsPath + "/")) {
+        log.appendLine(`[getRepo] matched repo: ${r.rootUri.fsPath} (via active editor)`);
+        return r;
+      }
+    }
+    log.appendLine(`[getRepo] active editor not in any repo root, fallback to repo 0`);
+  }
+
+  log.appendLine(`[getRepo] fallback to repo 0: ${api.repositories[0]?.rootUri.fsPath}`);
+  return api.repositories[0];
 }
 
 // ── Tool implementations ────────────────────────────────────────────
@@ -375,6 +390,7 @@ async function handleCommit() {
     const finalMsg = formatResultCaptured || commitMessage;
     if (finalMsg) {
       repo.inputBox.value = finalMsg;
+      log.appendLine(`finalMessage:\n${finalMsg}\n`);
       log.appendLine("── Commit message set in SCM input box ──");
       void vscode.window.showInformationMessage("Commit message generated!");
     } else {

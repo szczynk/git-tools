@@ -1,3 +1,6 @@
+import http from "http";
+import https from "https";
+
 export interface LLMConfig {
   baseUrl: string;
   apiKey: string;
@@ -69,42 +72,56 @@ export async function* streamChat(config: LLMConfig, opts: ChatOpts): AsyncGener
   toolCall?: ToolCallChunk;
 }> {
   const url = config.baseUrl.replace(/\/+$/, "") + "/chat/completions";
+  const urlObj = new URL(url);
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (config.apiKey) headers["Authorization"] = `Bearer ${config.apiKey}`;
 
-  const body: Record<string, unknown> = {
+  const bodyObj: Record<string, unknown> = {
     model: config.model,
     messages: opts.messages,
     stream: true,
   };
-  if (opts.tools?.length) body.tools = opts.tools;
-  if (opts.signal) body.signal = undefined;
+  if (opts.tools?.length) bodyObj.tools = opts.tools;
 
-  const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body), signal: opts.signal });
-  if (!res.ok) {
-    const errText = await res.text().catch(() => "");
-    throw new Error(`LLM API error HTTP ${res.status}: ${errText || res.statusText}`);
+  const body = JSON.stringify(bodyObj);
+  const httpMod = urlObj.protocol === "https:" ? https : http;
+
+  const res = await new Promise<http.IncomingMessage>((resolve, reject) => {
+    const req = httpMod.request(urlObj, {
+      method: "POST",
+      headers,
+      signal: opts.signal,
+    }, resolve);
+    req.on("error", reject);
+    req.write(body);
+    req.end();
+  });
+
+  if (opts.signal) {
+    opts.signal.addEventListener("abort", () => res.destroy(), { once: true });
   }
 
-  const reader = res.body?.getReader();
-  if (!reader) throw new Error("No response body");
+  if (res.statusCode !== 200) {
+    let errBody = "";
+    for await (const chunk of res) {
+      errBody += chunk.toString();
+    }
+    throw new Error(`LLM API error HTTP ${res.statusCode}: ${errBody}`);
+  }
 
   const decoder = new TextDecoder();
   let buffer = "";
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
+  for await (const chunk of res) {
+    buffer += decoder.decode(chunk as Uint8Array, { stream: true });
     const lines = buffer.split("\n");
     buffer = lines.pop() ?? "";
 
     for (const line of lines) {
       const parsed = parseSSELine(line);
       if (!parsed) continue;
-      const chunk = parsed as Record<string, unknown>;
-      const choices = chunk.choices as Array<Record<string, unknown>> | undefined;
+      const chunkData = parsed as Record<string, unknown>;
+      const choices = chunkData.choices as Array<Record<string, unknown>> | undefined;
       if (!choices?.length) continue;
       const delta = choices[0].delta as Record<string, unknown> | undefined;
       if (!delta) continue;
