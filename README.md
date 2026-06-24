@@ -67,11 +67,15 @@ VS Code extension that exposes git tools as **language model tools** (`vscode.lm
 **SCM button:** A single "AI Commit" (`$(wand)`) button in the source control title bar.
 
 When clicked, it:
-1. Launches the AI commit assistant via `vscode.lm`
+
+1. Launches the AI commit assistant via the built-in LM provider or any configured `vscode.lm` model
 2. The AI calls git tools (status → restore if staged → diff → format message)
 3. The final Conventional Commit message is placed in the SCM input box
 
+**Multi-repo workspaces:** If no file is open in the active editor, a QuickPick appears to select which repository to commit to.
+
 **Command palette:** 6 commands available:
+
 - `Git Tools: AI Commit` — full workflow (also in SCM title)
 - `Git Tools: Status` — show compact status
 - `Git Tools: Restore Staged` — unstage all changes
@@ -80,6 +84,7 @@ When clicked, it:
 - `Git Tools: Format Commit Message` — assemble commit message
 
 **Registered LM tools** (available to Copilot Chat and other `vscode.lm` consumers):
+
 - `git_tools_git_status`
 - `git_tools_git_restore_staged`
 - `git_tools_git_diff`
@@ -87,6 +92,7 @@ When clicked, it:
 - `git_tools_git_format_message`
 
 **Built-in LM provider:** The extension includes a "Git Tools Local LLM" provider for OpenAI-compatible APIs (llama.cpp, Ollama, any OpenAI-compatible endpoint). Configuration via:
+
 - **Activity Bar sidebar** — llama icon in the activity bar → LLM Configuration view (Base URL, API Key, Model)
 - **VS Code Settings** — `git-tools.baseUrl`, `git-tools.apiKey`, `git-tools.model`
 - Auto-detects available models from `{baseUrl}/models` endpoint

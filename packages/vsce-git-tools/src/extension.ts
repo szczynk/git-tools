@@ -9,6 +9,7 @@ import { LlamaProvider, getConfig } from "./llm-provider.js";
 import { LlamaConfigViewProvider } from "./llm-config-view.js";
 import { streamChat } from "./llm-service.js";
 import type { ChatMsg, ToolCallChunk } from "./llm-service.js";
+import path from "path";
 
 const P = "git_tools_";
 const TOOL_STATUS = `${P}git_status`;
@@ -112,7 +113,7 @@ function channel(): vscode.OutputChannel {
   return _channel;
 }
 
-function getRepo(): Repository | undefined {
+async function getRepo(): Promise<Repository | undefined> {
   const ext = vscode.extensions.getExtension<GitExtension>("vscode.git")?.exports;
   if (!ext?.getAPI) return;
   const api = ext.getAPI(1);
@@ -122,15 +123,31 @@ function getRepo(): Repository | undefined {
   if (activeUri) {
     for (const r of api.repositories) {
       if (activeUri.fsPath.startsWith(r.rootUri.fsPath + "/")) {
-        log.appendLine(`[getRepo] matched repo: ${r.rootUri.fsPath} (via active editor)`);
+        log.appendLine(`[getRepo] matched via editor: ${r.rootUri.fsPath}`);
         return r;
       }
     }
-    log.appendLine(`[getRepo] active editor not in any repo root, fallback to repo 0`);
+    log.appendLine(`[getRepo] active editor not in any repo`);
   }
 
-  log.appendLine(`[getRepo] fallback to repo 0: ${api.repositories[0]?.rootUri.fsPath}`);
-  return api.repositories[0];
+  if (api.repositories.length === 1) {
+    log.appendLine(`[getRepo] single repo: ${api.repositories[0].rootUri.fsPath}`);
+    return api.repositories[0];
+  }
+
+  const picks = api.repositories.map(r => ({
+    label: path.basename(r.rootUri.fsPath),
+    description: r.rootUri.fsPath,
+    repo: r,
+  }));
+  const chosen = await vscode.window.showQuickPick(picks, {
+    placeHolder: "Select repo for AI commit",
+  });
+  if (chosen) {
+    log.appendLine(`[getRepo] user picked: ${chosen.description}`);
+    return chosen.repo;
+  }
+  return;
 }
 
 // ── Tool implementations ────────────────────────────────────────────
@@ -232,7 +249,7 @@ class FormatTool implements vscode.LanguageModelTool<FormatMessageParams> {
 // ── SCM commit workflow ──────────────────────────────────────────────
 
 async function handleCommit() {
-  const repo = getRepo();
+  const repo = await getRepo();
   if (!repo) {
     void vscode.window.showErrorMessage("No git repository found");
     return;
@@ -390,7 +407,7 @@ async function handleCommit() {
     const finalMsg = formatResultCaptured || commitMessage;
     if (finalMsg) {
       repo.inputBox.value = finalMsg;
-      log.appendLine(`finalMessage:\n${finalMsg}\n`);
+      log.appendLine(`\n\n\nfinalMessage:\n\n${finalMsg}\n`);
       log.appendLine("── Commit message set in SCM input box ──");
       void vscode.window.showInformationMessage("Commit message generated!");
     } else {
