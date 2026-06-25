@@ -2,7 +2,6 @@ import type {
   ExtensionAPI,
   ExtensionContext,
   TurnEndEvent,
-  TurnStartEvent,
 } from "@earendil-works/pi-coding-agent";
 import type { TextContent, ToolResultMessage } from "@earendil-works/pi-ai/base";
 import { FULL_DIFF_HINT, MAX_NUDGES } from "@szczynk/git-tools-core";
@@ -16,18 +15,6 @@ import {
 export function registerEvents(pi: ExtensionAPI) {
   let awaitingGitFormatMessage = false;
   let nudgeCount = 0;
-  let shouldNudge = false;
-
-  pi.on("turn_start", async (_event: TurnStartEvent, _ctx: ExtensionContext) => {
-    if (shouldNudge) {
-      pi.sendMessage({
-        customType: `${GIT_TOOLS_FORMAT_NAME}_remainder`,
-        content: GIT_TOOLS_FORMAT_PROMPT_RESULT_NOT_CALLED,
-        display: true,
-      });
-      shouldNudge = false;
-    }
-  });
 
   pi.on("turn_end", async (event: TurnEndEvent, ctx: ExtensionContext) => {
     if (!awaitingGitFormatMessage) return;
@@ -41,7 +28,6 @@ export function registerEvents(pi: ExtensionAPI) {
     if (calledGitFormatMessage) {
       awaitingGitFormatMessage = false;
       nudgeCount = 0;
-      shouldNudge = false;
       return;
     }
 
@@ -60,11 +46,14 @@ export function registerEvents(pi: ExtensionAPI) {
 
     if (nudgeCount < MAX_NUDGES) {
       nudgeCount++;
-      shouldNudge = true;
+      pi.sendMessage({
+        customType: `${GIT_TOOLS_FORMAT_NAME}_remainder`,
+        content: GIT_TOOLS_FORMAT_PROMPT_RESULT_NOT_CALLED,
+        display: true,
+      });
       ctx.ui.notify(`Nudging model to call ${GIT_TOOLS_FORMAT_NAME} after diff`, "warning");
     } else {
       awaitingGitFormatMessage = false;
-      shouldNudge = false;
       ctx.ui.notify(
         `Model still hasn't called ${GIT_TOOLS_FORMAT_NAME} after diff after ${MAX_NUDGES} nudges`,
         "error",
@@ -73,6 +62,11 @@ export function registerEvents(pi: ExtensionAPI) {
   });
 
   return {
-    setAwaitingGitFormatMessage: (v: boolean) => { awaitingGitFormatMessage = v; },
+    setAwaitingGitFormatMessage: (v: boolean) => {
+      awaitingGitFormatMessage = v;
+      if (!v) {
+        nudgeCount = 0;
+      }
+    },
   };
 }

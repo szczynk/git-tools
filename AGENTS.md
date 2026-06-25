@@ -14,12 +14,14 @@ npm workspaces (`packages/*`). 4 packages:
 Adapters depend on core as both tsconfig project reference and devDependency. Core is **bundled into adapters** at build time via `noExternal: ["@szczynk/git-tools-core"]` in tsup configs. Not a runtime dep of published adapters.
 
 DTS generation is disabled in all adapter tsup configs (composite project conflict).
+`tsconfig.base.json` has `ignoreDeprecations: "6.0"` — TS 6 migration quirk.
 
 ## Build
 
 - `npm run build` — builds all workspaces (core first via `--if-present`)
 - Per-package: `npm run build -w @szczynk/git-tools-<name>`
 - `prepack` runs build automatically
+- `npm run clean` — removes `packages/*/dist` and `packages/*/tsconfig.tsbuildinfo`. Per-package clean also deletes generated README.md (adapters) and `*.vsix` (vsce)
 
 ## Lint / Typecheck
 
@@ -50,7 +52,7 @@ Only core has tests (`packages/*/src/__test__/*.test.ts`). No CI configured.
 
 Pure git logic. Entry: `src/index.ts`. Exports:
 
-- `gitSync` — raw git command runner
+- `gitSync` — raw git command runner (`spawnSync`, 100 MB `maxBuffer`)
 - `compactStatus`, `hasStagedChanges`, `compactDiff`, `compactDiffText` — compact output parsers
 - `formatCommitMessage` — Conventional Commit assembler
 - Constants: `STAGED_RE`, `FULL_DIFF_HINT`, `COMMIT_TYPES` (11 types), `FAILED_ERROR_MESSAGE`, `MAX_NUDGES`
@@ -65,6 +67,12 @@ All 3 share the same 5-tool surface (tool names prefixed `git_tools_`):
 - `git_format_message` — assemble + validate Conventional Commit message
 
 Schema: PI uses `typebox`, OpenCode uses `zod`, VSCE uses `vscode.git` API with `type` from `package.json` contribution point.
+
+tsup configs: core bundled via `noExternal: ["@szczynk/git-tools-core"]` in all 3 adapters. opencode additionally `external`s `@opencode-ai/*` (peer deps). vsce `external`s `vscode`.
+
+### pi-git-tools differences
+
+Additional files beyond tools: `command.ts` (custom `/commit` command registration), `events.ts` (inter-extension event bus). Uses `Type` from `typebox`.
 
 ### vsce-git-tools quirks
 
