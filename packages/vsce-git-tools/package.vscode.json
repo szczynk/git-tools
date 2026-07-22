@@ -2,7 +2,7 @@
   "name": "vsce-git-tools",
   "displayName": "VSCE Git Tools",
   "publisher": "szczynk",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "VS Code extension for git-tools — commit message formatting and git helpers",
   "license": "MIT",
   "author": "szczynk",
@@ -81,7 +81,8 @@
         {
           "type": "webview",
           "id": "git-tools.llmConfig",
-          "name": "LLM Configuration"
+          "name": "LLM Configuration",
+          "icon": "resources/llama-sidebar.svg"
         }
       ]
     },
@@ -124,7 +125,8 @@
     "languageModelTools": [
       {
         "name": "git_tools_git_status",
-        "description": "Show compact git status (porcelain format with branch info). If staged changes are present, call git_tools_git_restore_staged to unstage them.",
+        "displayName": "Git Status",
+        "modelDescription": "Show compact git status (porcelain format with branch info). If staged changes are present, call git_tools_git_restore_staged to unstage them.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -134,7 +136,8 @@
       },
       {
         "name": "git_tools_git_restore_staged",
-        "description": "Unstage all staged changes.",
+        "displayName": "Git Restore Staged",
+        "modelDescription": "Unstage all staged changes.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -144,7 +147,8 @@
       },
       {
         "name": "git_tools_git_diff",
-        "description": "Show compact git diff with stat summary (500 line cap, 100 lines per hunk). If the result contains a hint, call git_tools_git_diff_no_compact.",
+        "displayName": "Git Diff",
+        "modelDescription": "Show compact git diff with stat summary (500 line cap, 100 lines per hunk). If the result contains a hint, call git_tools_git_diff_no_compact.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -155,7 +159,8 @@
       },
       {
         "name": "git_tools_git_diff_no_compact",
-        "description": "Show full git diff with stat summary (no truncation).",
+        "displayName": "Git Diff (No Compact)",
+        "modelDescription": "Show full git diff with stat summary (no truncation).",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -166,7 +171,8 @@
       },
       {
         "name": "git_tools_git_format_message",
-        "description": "Assemble and validate a Conventional Commit message from structured fields. Call this after analyzing the diff.",
+        "displayName": "Git Format Message",
+        "modelDescription": "Assemble and validate a Conventional Commit message from structured fields. Call this after analyzing the diff.",
         "inputSchema": {
           "type": "object",
           "properties": {
