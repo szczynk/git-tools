@@ -22,7 +22,7 @@ export async function executeStatus(_toolCallId: string, params: GitStatusParams
   }
 
   if (STAGED_RE.test(output)) {
-    return { content: [{ type: "text", text: GIT_TOOLS_STATUS_PROMPT_RESULT_STAGED }], details: undefined };
+    return { content: [{ type: "text", text: output + GIT_TOOLS_STATUS_PROMPT_RESULT_STAGED }], details: undefined };
   }
 
   return { content: [{ type: "text", text: output + GIT_TOOLS_STATUS_PROMPT_RESULT }], details: undefined };

@@ -18,7 +18,11 @@ export const GIT_TOOLS_COMMAND_PROMPT_1 =
   `2. CALL \`${GIT_TOOLS_DIFF_NAME}\` to see the code changes.\n` +
   "   *Note: The diff output provided is complete. Do not use bash tools to read external log files.*\n" +
   "3. Analyze the diff to understand the changes and draft a commit message.\n" +
-  `4. CALL TOOL: \`${GIT_TOOLS_FORMAT_NAME}\` with your draft message to get the final formatted Conventional Commit message.`
+  `4. CALL TOOL: \`${GIT_TOOLS_FORMAT_NAME}\` with your draft message to get the final formatted Conventional Commit message.` +
+  `\n\n## \`${GIT_TOOLS_STATUS_NAME}\` short status\n\n` + 
+  "XY PATH. X=staged, Y=unstaged.\n" +
+  "? untracked, M modified, A added, D deleted, R renamed, C copied, U conflict, space none.\n" +
+  "?? new. M_ staged mod. M unstaged mod. MM both. A staged add. D_ staged del. R_ staged rename. _=space."
 
 export const GIT_TOOLS_COMMAND_PROMPT_2 =
   "\n\n## CRITICAL: Final Output Rule\n\n" +
@@ -37,7 +41,7 @@ export const GIT_TOOLS_STATUS_PROMPT_SNIPPET = "Show compact git status (porcela
 export const GIT_TOOLS_STATUS_PROMPT_RESULT =
   "\n\n\nREQUIRED:\n" + `2. CALL \`${GIT_TOOLS_DIFF_NAME}\` to see the code changes.`
 export const GIT_TOOLS_STATUS_PROMPT_RESULT_STAGED =
-  "WARNING: Staged changes detected.\n" +
+  "\n\n\nWARNING: Staged changes detected.\n" +
   `STOP. DO NOT CALL \`${GIT_TOOLS_DIFF_NAME}\` YET.\n` +
   `REQUIRED: CALL \`${GIT_TOOLS_RESTORE_STAGED_NAME}\` tool now.`
 export const GIT_TOOLS_STATUS_PROMPT_RESULT_EMPTY =

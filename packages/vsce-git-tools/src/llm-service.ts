@@ -36,6 +36,7 @@ export async function fetchModels(config: LLMConfig): Promise<ModelInfo[]> {
 export interface ChatMsg {
   role: "system" | "user" | "assistant" | "tool";
   content: string | null;
+  reasoning_content?: string;
   tool_calls?: Array<{
     id: string;
     type: "function";
@@ -66,8 +67,51 @@ export function parseSSELine(line: string): object | null {
   try { return JSON.parse(payload); } catch { return null; }
 }
 
+const toolCallBlockRe = /<tool_call>[\s\S]*?<\/tool_call>/g;
+const toolCallFnRe = /<function=([^>\s]+)>/;
+const toolCallParamRe = /<parameter=([^>\s]+)>([\s\S]*?)<\/parameter>/g;
+
+function coerceArg(value: string): unknown {
+  const trimmed = value.trim();
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
+
+function deltaToString(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    return value.map(p =>
+      typeof p === "object" && p !== null && "text" in p
+        ? String((p as { text: unknown }).text ?? "")
+        : ""
+    ).join("");
+  }
+  return String(value ?? "");
+}
+
+function extractToolCallXml(xml: string, index: number): ToolCallChunk | null {
+  const fnMatch = xml.match(toolCallFnRe);
+  if (!fnMatch) return null;
+  const name = fnMatch[1].trim();
+
+  const args: Record<string, unknown> = {};
+  for (const pm of xml.matchAll(toolCallParamRe)) {
+    args[pm[1].trim()] = coerceArg(pm[2]);
+  }
+
+  return {
+    id: `reasoning_${index}`,
+    name,
+    args: JSON.stringify(args),
+    index: 1000 + index,
+  };
+}
+
 export async function* streamChat(config: LLMConfig, opts: ChatOpts): AsyncGenerator<{
-  type: "text" | "tool_call" | "done";
+  type: "reasoning" | "text" | "tool_call" | "done";
   text?: string;
   toolCall?: ToolCallChunk;
 }> {
@@ -111,6 +155,9 @@ export async function* streamChat(config: LLMConfig, opts: ChatOpts): AsyncGener
 
   const decoder = new TextDecoder();
   let buffer = "";
+  let reasoningAccum = "";
+  let reasoningEmitPos = 0;
+  let parsedBlockCount = 0;
 
   for await (const chunk of res) {
     buffer += decoder.decode(chunk as Uint8Array, { stream: true });
@@ -125,6 +172,39 @@ export async function* streamChat(config: LLMConfig, opts: ChatOpts): AsyncGener
       if (!choices?.length) continue;
       const delta = choices[0].delta as Record<string, unknown> | undefined;
       if (!delta) continue;
+
+      const reasoningRaw = deltaToString(delta.reasoning_content);
+      if (reasoningRaw) {
+        reasoningAccum += reasoningRaw;
+        const blocks = reasoningAccum.match(toolCallBlockRe) ?? [];
+        while (parsedBlockCount < blocks.length) {
+          const call = extractToolCallXml(blocks[parsedBlockCount], parsedBlockCount);
+          parsedBlockCount++;
+          if (call) yield { type: "tool_call", toolCall: call };
+        }
+
+        let tail = reasoningAccum.slice(reasoningEmitPos);
+        let guard = 0;
+        while (tail && guard++ < 50) {
+          const bm = tail.match(toolCallBlockRe);
+          if (bm) {
+            const blockStart = tail.indexOf(bm[0]);
+            if (blockStart > 0) yield { type: "reasoning", text: tail.slice(0, blockStart) };
+            reasoningEmitPos += blockStart + bm[0].length;
+          } else {
+            const openIdx = tail.indexOf("<tool_call>");
+            if (openIdx !== -1) {
+              if (openIdx > 0) yield { type: "reasoning", text: tail.slice(0, openIdx) };
+              reasoningEmitPos += openIdx;
+            } else {
+              if (tail.length) yield { type: "reasoning", text: tail };
+              reasoningEmitPos = reasoningAccum.length;
+            }
+            break;
+          }
+          tail = reasoningAccum.slice(reasoningEmitPos);
+        }
+      }
 
       if (delta.content) {
         yield { type: "text", text: String(delta.content) };
@@ -153,6 +233,7 @@ export async function* streamChat(config: LLMConfig, opts: ChatOpts): AsyncGener
 
 export async function chatNonStreaming(config: LLMConfig, opts: ChatOpts): Promise<{
   text: string;
+  reasoningContent?: string;
   toolCalls?: ToolCallChunk[];
 }> {
   const url = config.baseUrl.replace(/\/+$/, "") + "/chat/completions";
@@ -173,6 +254,8 @@ export async function chatNonStreaming(config: LLMConfig, opts: ChatOpts): Promi
   const msg = choice?.message as Record<string, unknown> | undefined;
 
   const text = String(msg?.content ?? "");
+  const reasoningContent =
+    typeof msg?.reasoning_content === "string" ? msg.reasoning_content : undefined;
   const rawTcs = msg?.tool_calls as Array<Record<string, unknown>> | undefined;
   const toolCalls: ToolCallChunk[] = (rawTcs ?? []).map((tc, i) => {
     const fn = tc.function as Record<string, unknown> | undefined;
@@ -184,5 +267,5 @@ export async function chatNonStreaming(config: LLMConfig, opts: ChatOpts): Promi
     };
   });
 
-  return { text, toolCalls: toolCalls.length ? toolCalls : undefined };
+  return { text, reasoningContent, toolCalls: toolCalls.length ? toolCalls : undefined };
 }

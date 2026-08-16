@@ -24,6 +24,7 @@ export async function executeFormat(_toolCallId: string, params: FormatMessagePa
         result.message +
         GIT_TOOLS_COMMAND_PROMPT_2,
     }],
-    details: undefined
+    details: undefined,
+    terminate: true,
   };
 }

@@ -30,6 +30,10 @@ const CMD_PROMPT =
   "   *Note: The diff output provided is complete. Do not use bash tools to read external log files.*\n" +
   "3. Analyze the diff to understand the changes and draft a commit message.\n" +
   `4. CALL TOOL: \`${TOOL_FORMAT}\` with your draft message to get the final formatted Conventional Commit message.` +
+  `\n\n## \`${TOOL_STATUS}\` short status\n\n` + 
+  "XY PATH. X=staged, Y=unstaged.\n" +
+  "? untracked, M modified, A added, D deleted, R renamed, C copied, U conflict, space none.\n" +
+  "?? new. M_ staged mod. M unstaged mod. MM both. A staged add. D_ staged del. R_ staged rename. _=space." +
   "\n\n## CRITICAL: Final Output Rule\n\n" +
   `After calling \`${TOOL_FORMAT}\`, the tool will return the final, perfectly formatted commit message.\n` +
   "**DO NOT output any text after the tool result.**\n" +
@@ -299,6 +303,7 @@ async function handleCommit() {
       progress.report({ message: `Round ${round}/${MAX_ROUNDS}...` });
 
       let text = "";
+      let reasoning = "";
       let pendingToolCalls = new Map<number, ToolCallChunk>();
 
       try {
@@ -312,7 +317,9 @@ async function handleCommit() {
         for await (const chunk of stream) {
           if (ac.signal.aborted) break;
 
-          if (chunk.type === "text") {
+          if (chunk.type === "reasoning") {
+            reasoning += chunk.text ?? "";
+          } else if (chunk.type === "text") {
             text += chunk.text;
           } else if (chunk.type === "tool_call" && chunk.toolCall) {
             const idx = chunk.toolCall.index;
@@ -341,16 +348,25 @@ async function handleCommit() {
       }
 
       const toolCalls = Array.from(pendingToolCalls.values());
-      log.appendLine(`[round ${round}] text length: ${text.length}, tool calls: ${toolCalls.length}`);
+      log.appendLine(`[round ${round}] text length: ${text.length}, reasoning length: ${reasoning.length}, tool calls: ${toolCalls.length}`);
       if (text) log.appendLine(text);
 
       if (toolCalls.length === 0) {
-        commitMessage = text;
+        if (text) {
+          commitMessage = text;
+          break;
+        }
+        if (reasoning) {
+          log.appendLine("Only reasoning emitted; continuing workflow");
+          continue;
+        }
+        commitMessage = "";
         break;
       }
 
       // Build assistant message
       const asst: ChatMsg = { role: "assistant", content: text || null };
+      if (reasoning) asst.reasoning_content = reasoning;
       asst.tool_calls = toolCalls.map(tc => ({
         id: tc.id,
         type: "function" as const,

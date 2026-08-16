@@ -1,6 +1,6 @@
 {
   "name": "@szczynk/vsce-git-tools",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "VS Code extension for git-tools — commit message formatting and git helpers",
   "license": "MIT",
   "author": "szczynk",
